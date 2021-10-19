@@ -19,12 +19,11 @@ mongoose.connect(
 	(err) => {
 		if (err) throw err;
 		console.log("MongoDB connection established");
+		app.listen(port, () => {
+			console.log(`Example app listening at http://localhost:${port}`);
+		});
 	}
 );
-
-app.listen(port, () => {
-	console.log(`Example app listening at http://localhost:${port}`);
-});
 
 app.use("/users", require("./routes/users"));
 app.use("/todos", require("./routes/todo"));

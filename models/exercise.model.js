@@ -6,6 +6,18 @@ const exercisesSchema = new mongoose.Schema({
 		{
 			text: String,
 			id: String,
+			history: [
+				{
+					date: Date,
+					sets: [
+						{
+							reps: Number,
+							weight: Number,
+						},
+					],
+					note: String,
+				},
+			],
 		},
 	],
 });
