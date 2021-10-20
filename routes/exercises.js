@@ -3,7 +3,8 @@ const Exercises = require("../models/exercise.model");
 
 const ObjectId = require("mongoose").Types.ObjectId;
 
-router.get("/", async (req, res) => {
+// Finds the user and returns its _id
+const verifyAndGetUserId = async (req, res) => {
 	const { authorization } = req.headers;
 	const [, token] = authorization.split(" ");
 	const [username, password] = token.split(":");
@@ -16,10 +17,14 @@ router.get("/", async (req, res) => {
 		});
 		return;
 	}
+	return user._id;
+};
 
+router.get("/", async (req, res) => {
+	const userId = await verifyAndGetUserId(req, res);
 	try {
 		const { exercises } = await Exercises.findOne({
-			userId: user._id,
+			userId: userId,
 		}).exec();
 		res.json(exercises);
 	} catch {
@@ -28,27 +33,15 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-	const { authorization } = req.headers;
-	const [, token] = authorization.split(" ");
-	const [username, password] = token.split(":");
-
 	const exercisesItems = req.body;
-
-	const user = await User.findOne({ username }).exec();
-	if (!user) {
-		res.status(403);
-		res.json({
-			message: "invalid access",
-		});
-		return;
-	}
+	const userId = await verifyAndGetUserId(req, res);
 
 	const exercises = await Exercises.findOne({
-		userId: new ObjectId(user._id),
+		userId: new ObjectId(userId),
 	}).exec();
 	if (!exercises) {
 		await Exercises.create({
-			userId: user._id,
+			userId: userId,
 			exercises: exercisesItems,
 		});
 	} else {
@@ -59,31 +52,20 @@ router.post("/", async (req, res) => {
 });
 
 router.post("/:name", async (req, res) => {
-	const { authorization } = req.headers;
-	const [, token] = authorization.split(" ");
-	const [username, password] = token.split(":");
-
+	const userId = await verifyAndGetUserId(req, res);
 	const name = req.params.name;
-
 	const completedSets = req.body;
-
-	const user = await User.findOne({ username }).exec();
-	if (!user) {
-		res.status(403);
-		res.json({
-			message: "invalid access",
-		});
-		return;
-	}
 
 	const exercises = await Exercises.findOne(
 		{
-			userId: user._id,
+			userId: userId,
 		},
 		{
 			exercises: 1,
 		}
-	).exec();
+	)
+		.exec()
+		.catch((err) => console.log(err));
 	if (!exercises) {
 		res.status(404);
 		res.json({
@@ -112,6 +94,61 @@ router.post("/:name", async (req, res) => {
 
 	// Passing the history of a specific exercise for later use
 	res.json(exercises._doc.exercises[nameIndex]._doc.history);
+});
+
+router.post("/:name/delete", async (req, res) => {
+	const userId = await verifyAndGetUserId(req, res);
+	const idToDelete = req.body.id;
+	const name = req.params.name;
+
+	const exercises = await Exercises.findOne(
+		{
+			userId: userId,
+		},
+		{
+			exercises: 1,
+		}
+	).exec();
+	if (!exercises) {
+		res.status(404);
+		res.json({
+			message: "Page not found",
+		});
+		return;
+	}
+
+	let tempExercises;
+
+	exercises._doc.exercises.some((exercise) => {
+		if (exercise._doc.text === name) {
+			tempExercises = exercise;
+			return;
+		}
+	});
+	let indexToDelete;
+	const nameIndex = exercises._doc.exercises.indexOf(tempExercises);
+	const history = exercises._doc.exercises[nameIndex]._doc.history;
+	history.some((item) => {
+		if (item._doc._id == idToDelete) {
+			indexToDelete = history.indexOf(item);
+		}
+	});
+
+	try {
+		// This is so ugly, make it look better.
+		exercises._doc.exercises[nameIndex]._doc.history.splice(
+			indexToDelete,
+			1
+		);
+
+		await exercises.save();
+
+		res.json({ deleted: true });
+	} catch (err) {
+		console.log(err);
+	}
+
+	// Passing the history of a specific exercise for later use
 });
 
 module.exports = router;
